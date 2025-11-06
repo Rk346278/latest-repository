@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import type { PharmacyOwner, InventoryItem } from '../types';
 import { StockStatus } from '../types';
@@ -85,7 +86,7 @@ export const PharmacyOwnerPage: React.FC = () => {
         setInventory([]);
     };
     
-    const handleItemAdd = (newItem: Omit<InventoryItem, 'stock'>) => {
+    const handleItemAdd = async (newItem: Omit<InventoryItem, 'stock'>) => {
         if (!owner) return;
         
         const pharmacyId = owner.id;
@@ -105,7 +106,7 @@ export const PharmacyOwnerPage: React.FC = () => {
         try {
             localStorage.setItem(`${INVENTORY_KEY}_${pharmacyId}`, JSON.stringify(updatedInventory));
             setInventory(updatedInventory);
-            updateGlobalInventory(pharmacyId, [fullNewItem]);
+            await updateGlobalInventory(pharmacyId, [fullNewItem]);
         } catch (error) {
             console.error("Failed to save inventory", error);
         }
@@ -139,14 +140,14 @@ export const PharmacyOwnerPage: React.FC = () => {
             localStorage.setItem(`${INVENTORY_KEY}_${pharmacyId}`, JSON.stringify(updatedInventory));
             setInventory(updatedInventory);
             
-            updateGlobalInventory(pharmacyId, parsedItems);
+            await updateGlobalInventory(pharmacyId, parsedItems);
         } catch (error) {
             console.error("Error processing price slip:", error);
             throw error; 
         }
     };
 
-    const handleStockStatusChange = (medicineName: string, newStatus: StockStatus) => {
+    const handleStockStatusChange = async (medicineName: string, newStatus: StockStatus) => {
         if (!owner) return;
         const pharmacyId = owner.id;
 
@@ -159,14 +160,14 @@ export const PharmacyOwnerPage: React.FC = () => {
         try {
             setInventory(updatedInventory);
             localStorage.setItem(`${INVENTORY_KEY}_${pharmacyId}`, JSON.stringify(updatedInventory));
-            updateStockStatusInGlobalInventory(pharmacyId, medicineName, newStatus);
+            await updateStockStatusInGlobalInventory(pharmacyId, medicineName, newStatus);
         } catch (error) {
             console.error("Failed to update stock status", error);
         }
     };
 
 
-    const handleItemDelete = (medicineNameToDelete: string) => {
+    const handleItemDelete = async (medicineNameToDelete: string) => {
          if (!owner) return;
 
          const pharmacyId = owner.id;
@@ -177,7 +178,7 @@ export const PharmacyOwnerPage: React.FC = () => {
         try {
             localStorage.setItem(`${INVENTORY_KEY}_${pharmacyId}`, JSON.stringify(updatedInventory));
             setInventory(updatedInventory);
-            deleteFromGlobalInventory(pharmacyId, medicineNameToDelete);
+            await deleteFromGlobalInventory(pharmacyId, medicineNameToDelete);
         } catch (error) {
             console.error("Failed to update inventory", error);
         }
