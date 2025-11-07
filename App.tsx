@@ -1,11 +1,12 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from './components/Header';
 import { HomePage } from './components/HomePage';
 import { ResultsPage } from './components/ResultsPage';
 import { PharmacyDetailModal } from './components/PharmacyDetailModal';
 import { AccessibilityControls } from './components/AccessibilityControls';
-import { getMedicineRecommendations, validateMedicineName, getMedicineDescription } from './services/geminiService';
-import { findNearbyPharmacies } from './services/pharmacyService';
+import { getMedicineRecommendations, validateMedicineName, getMedicineDescription, getMedicineAlternative } from './services/geminiService';
+import { checkMedicineLocally, findNearbyPharmacies, getMedicineDetailsForPharmacy } from './services/pharmacyService';
 import { StockStatus } from './types';
 import type { Pharmacy, SortKey, FontSize, SearchConfirmation } from './types';
 import { PharmacyOwnerPage } from './components/PharmacyOwnerPage';
@@ -55,10 +56,15 @@ export default function App() {
           const descriptionPromise = getMedicineDescription(medicine);
           const pharmaciesPromise = findNearbyPharmacies({ lat: latitude, lon: longitude }, medicine);
           
-          const [description, foundPharmacies] = await Promise.all([descriptionPromise, pharmaciesPromise]);
+          let [description, foundPharmacies] = await Promise.all([descriptionPromise, pharmaciesPromise]);
 
           setMedicineDescription(description);
-          setPharmacies(foundPharmacies);
+          
+          const availablePharmacies = foundPharmacies.filter(
+            p => p.stock === StockStatus.Available
+          );
+
+          setPharmacies(availablePharmacies);
 
         } catch (error) {
            console.error("Failed to find pharmacies or get description:", error);
@@ -91,9 +97,16 @@ export default function App() {
     setSearchConfirmation(null);
     setLocationError('');
     setIsLoading(true);
-    setStatusText(`Validating '${trimmedMedicine}'...`);
+    setStatusText(`Searching for '${trimmedMedicine}'...`);
 
     try {
+        const isLocallyAvailable = await checkMedicineLocally(trimmedMedicine);
+        if (isLocallyAvailable) {
+            handleMedicineSelect(trimmedMedicine);
+            return;
+        }
+        
+        setStatusText(`Validating '${trimmedMedicine}'...`);
         const validation = await validateMedicineName(trimmedMedicine);
 
         if (!validation.valid) {
@@ -162,8 +175,9 @@ export default function App() {
         case 'distance':
           return a.distance - b.distance;
         case 'availability':
-          const stockOrder = { [StockStatus.InStock]: 1, [StockStatus.LowStock]: 2, [StockStatus.OutOfStock]: 3 };
-          return stockOrder[a.stock] - stockOrder[b.stock];
+          // All pharmacies are 'Available', so this sort is equivalent
+          // to sorting by distance as a secondary criterion.
+          return a.distance - b.distance;
         default:
           return 0;
       }

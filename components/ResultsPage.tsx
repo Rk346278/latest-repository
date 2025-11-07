@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Pharmacy, SortKey, SearchConfirmation } from '../types';
 import { PharmacyCard } from './PharmacyCard';
@@ -155,7 +156,7 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
   );
 
   const noResultsContent = (
-     <p className="text-center text-gray-400 py-10">{statusText || 'No results found.'}</p>
+     <p className="text-center text-gray-400 py-10">{statusText || 'No pharmacies found with this medicine in stock.'}</p>
   );
 
   const renderMainContent = () => {
@@ -176,7 +177,6 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
           <div className="flex items-center space-x-2">
             <SortButton active={sortBy === 'distance'} onClick={() => onSortChange('distance')}>Distance</SortButton>
             <SortButton active={sortBy === 'price'} onClick={() => onSortChange('price')}>Price</SortButton>
-            <SortButton active={sortBy === 'availability'} onClick={() => onSortChange('availability')}>Availability</SortButton>
           </div>
         </div>
         </>

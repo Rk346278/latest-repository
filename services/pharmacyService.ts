@@ -11,7 +11,7 @@ import type { Pharmacy, InventoryItem, PharmacyOwner } from '../types';
 const DB_KEY = 'appDatabase';
 
 // Storing only the core, non-runtime properties of a pharmacy.
-type BasePharmacy = Omit<Pharmacy, 'distance' | 'price' | 'priceUnit' | 'stock' | 'isBestOption'>;
+type BasePharmacy = Omit<Pharmacy, 'distance' | 'price' | 'priceUnit' | 'stock' | 'isBestOption' | 'alternative'>;
 
 interface GlobalInventory {
   [medicineName: string]: {
@@ -62,7 +62,7 @@ export const updateGlobalInventory = async (pharmacyId: number, items: Inventory
             globalInventory[medicineKey] = [];
         }
         const pharmacyEntryIndex = globalInventory[medicineKey].findIndex(p => p.pharmacyId === pharmacyId);
-        const stock = item.stock || StockStatus.InStock;
+        const stock = item.stock || StockStatus.Available;
 
         if (pharmacyEntryIndex > -1) {
             globalInventory[medicineKey][pharmacyEntryIndex].price = item.price;
@@ -106,34 +106,30 @@ interface Location {
   lon: number;
 }
 
-// A verified dataset of real pharmacies from Google Maps in the requested areas of Bangalore.
-export const VERIFIED_PHARMACIES_IN_BANGALORE: BasePharmacy[] = [
-    // Kengeri Area (Verified on Google Maps)
-    { id: 21, name: 'Apollo Pharmacy', address: 'Mysore Road, Kengeri Satellite Town', phone: '080-2848-1122', lat: 12.9189, lon: 77.4856 },
-    { id: 22, name: 'Medplus Pharmacy', address: 'Kengeri Main Rd, Opposite Kengeri Bus Terminal', phone: '080-2848-3344', lat: 12.9155, lon: 77.4808 },
-    { id: 30, name: 'Sri Maruthi Pharma', address: '1st Main Road, Kengeri Upanagara', phone: '080-2848-5566', lat: 12.9213, lon: 77.4842 },
-    { id: 31, name: 'HealthFirst Pharmacy', address: 'Kommaghatta Main Rd, Kengeri Hobli', phone: '080-2848-7788', lat: 12.9252, lon: 77.4759 },
-    // Uttarahalli Area (Verified on Google Maps)
-    { id: 23, name: 'Apollo Pharmacy', address: 'Uttarahalli Main Rd, Chikkalasandra', phone: '080-2673-5050', lat: 12.9077, lon: 77.5451 },
-    { id: 24, name: 'Sri Sai Medical & General Stores', address: 'Subramanyapura Main Road', phone: '080-2639-1212', lat: 12.9015, lon: 77.5490 },
-    { id: 32, name: 'MedPlus Pharmacy', address: 'Dr Vishnuvardhan Rd, AGS Layout', phone: '080-2639-4455', lat: 12.9058, lon: 77.5401 },
-    { id: 33, name: 'Jan Aushadhi Kendra', address: 'Padmanabhanagar, Near Uttarahalli', phone: '080-2639-8899', lat: 12.9125, lon: 77.5523 },
-    // RR Nagar (Rajarajeshwari Nagar) Area (Verified on Google Maps)
-    { id: 25, name: 'Apollo Pharmacy', address: 'Near RR Nagar Arch, Mysore Road', phone: '080-2860-9090', lat: 12.9265, lon: 77.5188 },
-    { id: 26, name: 'Medplus Pharmacy', address: '8th Cross, BEML Layout, RR Nagar', phone: '080-2860-7070', lat: 12.9303, lon: 77.5102 },
-    { id: 27, name: 'Dava Discount', address: 'Ideal Homes Township, RR Nagar', phone: '080-2861-1234', lat: 12.9331, lon: 77.5145 },
-    { id: 34, name: 'Apollo Pharmacy - BEML Layout', address: '9th Main Rd, BEML Layout, RR Nagar', phone: '080-2860-3030', lat: 12.9298, lon: 77.5113 },
-    // Banashankari Area (Verified on Google Maps)
-    { id: 18, name: 'Apollo Pharmacy', address: '24th Main Rd, Banashankari 2nd Stage', phone: '080-2671-5555', lat: 12.9251, lon: 77.5469 },
-    { id: 28, name: 'Wellness Forever', address: 'Outer Ring Rd, Banashankari 3rd Stage', phone: '080-2679-8899', lat: 12.9157, lon: 77.5571 },
-    { id: 29, name: 'MedPlus Pharmacy', address: 'Kathriguppe Main Rd, Banashankari 3rd Stage', phone: '080-2672-2200', lat: 12.9105, lon: 77.5603 },
-    { id: 36, name: 'Sri Guru Medicals', address: 'Near BDA Complex, BSK 2nd Stage', phone: '080-2671-8888', lat: 12.9285, lon: 77.5504 },
-    { id: 37, 'name': 'Vivek Pharma', 'address': 'Kadirenahalli Cross, Banashankari', phone: '080-2671-9999', lat: 12.9193, lon: 77.5620 },
-    // Other areas for variety
-    { id: 1, name: 'Apollo Pharmacy - Jayanagar', address: 'Jayanagar 9th Block, Bangalore', phone: '080-2663-0919', lat: 12.9248, lon: 77.5843 },
-    { id: 2, name: 'Wellness Forever - Koramangala', address: 'Koramangala 4th Block, Bangalore', phone: '080-4110-2222', lat: 12.9345, lon: 77.6264 },
-    { id: 3, name: 'MedPlus Pharmacy - Indiranagar', address: 'Indiranagar, 100 Feet Rd, Bangalore', phone: '080-4092-7575', lat: 12.9784, lon: 77.6408 },
-];
+// This list has been cleared to ensure that all pharmacies are added by their owners.
+export const VERIFIED_PHARMACIES_IN_BANGALORE: BasePharmacy[] = [];
+
+/**
+ * Retrieves the list of all pharmacies in the system (verified and user-added).
+ * The list is combined and sorted alphabetically.
+ * @returns A promise that resolves to an array of BasePharmacy objects.
+ */
+export const getRegisteredPharmacies = async (): Promise<BasePharmacy[]> => {
+    const db = getDb();
+    const allPharmacies = [...VERIFIED_PHARMACIES_IN_BANGALORE, ...db.dynamicPharmacies];
+
+    // Use a map to handle potential duplicates, preferring the last one encountered (user-added if name conflicts)
+    const pharmacyMap = new Map<string, BasePharmacy>();
+    allPharmacies.forEach(p => pharmacyMap.set(p.name.toLowerCase(), p));
+    
+    const uniquePharmacies = Array.from(pharmacyMap.values());
+    
+    // Sort for consistent display
+    uniquePharmacies.sort((a, b) => a.name.localeCompare(b.name));
+    
+    return uniquePharmacies;
+};
+
 
 /**
  * Registers a new pharmacy or retrieves an existing one by name.
@@ -170,6 +166,43 @@ export const registerOrGetPharmacy = async (details: PharmacyOwner, location: { 
 };
 
 /**
+ * Checks if a medicine exists in the local globalInventory.
+ * @param medicineName The name of the medicine to check.
+ * @returns A promise that resolves to true if the medicine is in the inventory, false otherwise.
+ */
+export const checkMedicineLocally = async (medicineName: string): Promise<boolean> => {
+  // Simulate a quick, non-blocking check
+  await new Promise(resolve => setTimeout(resolve, 50));
+  
+  const db = getDb();
+  const medicineKey = medicineName.toLowerCase();
+  
+  // Check if the key exists and the array for that key is not empty
+  return !!db.globalInventory[medicineKey] && db.globalInventory[medicineKey].length > 0;
+};
+
+/**
+ * Retrieves the price and stock for a specific medicine at a single pharmacy.
+ * @param pharmacyId The ID of the pharmacy.
+ * @param medicineName The name of the medicine.
+ * @returns A promise that resolves to the medicine's details or null if not found.
+ */
+export const getMedicineDetailsForPharmacy = async (pharmacyId: number, medicineName: string): Promise<{ price: number; stock: StockStatus } | null> => {
+    const db = getDb();
+    const medicineKey = medicineName.toLowerCase();
+    const inventoryEntry = db.globalInventory[medicineKey];
+    
+    if (inventoryEntry) {
+        const pharmacyData = inventoryEntry.find(p => p.pharmacyId === pharmacyId);
+        if (pharmacyData) {
+            return { price: pharmacyData.price, stock: pharmacyData.stock };
+        }
+    }
+    return null;
+};
+
+
+/**
  * Calculates the Haversine distance between two points on the Earth.
  * @param loc1 First location { lat, lon }
  * @param loc2 Second location { lat, lon }
@@ -188,7 +221,9 @@ function haversineDistance(loc1: Location, loc2: Location): number {
 }
 
 /**
- * Finds nearby pharmacies, using the global inventory to determine price and stock.
+ * Finds nearby pharmacies, prioritizing those with the medicine in stock.
+ * This ensures that if a pharmacy has the medicine, it will be shown in the results,
+ * regardless of its distance. The list is then supplemented with closer, out-of-stock options.
  * @param userLocation The user's current latitude and longitude.
  * @param medicineName The name of the medicine being searched.
  * @returns A promise that resolves to an array of Pharmacy objects.
@@ -200,15 +235,13 @@ export const findNearbyPharmacies = async (userLocation: Location, medicineName:
   const db = getDb();
   const { globalInventory, dynamicPharmacies } = db;
   
-  // 1. Get inventory data for the specific medicine from our database
   const pharmaciesWithStock = globalInventory[medicineName.toLowerCase()] || [];
   const stockedPharmacyIds = new Set(pharmaciesWithStock.map(p => p.pharmacyId));
   const priceMap = new Map(pharmaciesWithStock.map(p => [p.pharmacyId, p.price]));
   const stockMap = new Map(pharmaciesWithStock.map(p => [p.pharmacyId, p.stock]));
 
-  // 2. Map over ALL pharmacies (verified + dynamic), enriching them with real data or marking as out of stock
   const allBasePharmacies = [...VERIFIED_PHARMACIES_IN_BANGALORE, ...dynamicPharmacies];
-  const allPharmaciesWithDetails: Pharmacy[] = allBasePharmacies.map(pharmacy => {
+  const allPharmaciesWithDetails: Omit<Pharmacy, 'isBestOption'>[] = allBasePharmacies.map(pharmacy => {
     const distance = parseFloat(haversineDistance(userLocation, pharmacy).toFixed(1));
     const hasEntry = stockedPharmacyIds.has(pharmacy.id);
 
@@ -217,38 +250,51 @@ export const findNearbyPharmacies = async (userLocation: Location, medicineName:
       distance,
       price: hasEntry ? priceMap.get(pharmacy.id)! : 0,
       priceUnit: hasEntry ? 'per strip' : '-',
-      stock: hasEntry ? stockMap.get(pharmacy.id)! : StockStatus.OutOfStock,
-      isBestOption: false,
+      stock: hasEntry ? stockMap.get(pharmacy.id)! : StockStatus.Unavailable,
     };
   });
 
-   // 3. Find nearby pharmacies that have the medicine available.
-  const nearbyPharmacies = allPharmaciesWithDetails.sort((a,b) => a.distance - b.distance);
-  const availablePharmacies = nearbyPharmacies.filter(p => p.stock === StockStatus.InStock);
+  // 1. Separate pharmacies into available and unavailable lists
+  const availablePharmacies: Pharmacy[] = allPharmaciesWithDetails
+    .filter(p => p.stock === StockStatus.Available)
+    .map(p => ({ ...p, isBestOption: false }));
+
+  const unavailablePharmacies: Pharmacy[] = allPharmaciesWithDetails
+    .filter(p => p.stock !== StockStatus.Available)
+    .map(p => ({ ...p, isBestOption: false }));
+
+  // 2. Sort unavailable pharmacies by distance
+  unavailablePharmacies.sort((a, b) => a.distance - b.distance);
+
+  // 3. Combine the lists: take ALL available pharmacies, and supplement with the nearest unavailable ones up to a total of 15.
+  const MAX_RESULTS = 15;
+  const combinedResults = [...availablePharmacies];
+  const neededUnavailable = MAX_RESULTS - combinedResults.length;
+
+  if (neededUnavailable > 0) {
+    combinedResults.push(...unavailablePharmacies.slice(0, neededUnavailable));
+  }
   
-  const results = availablePharmacies.slice(0, 10); // Show up to 10 available pharmacies.
-
-  // 4. Determine "Best Option" from the available results
+  // 4. Determine the "Best Option" from ALL available pharmacies, not just the closest ones.
   let bestOption: Pharmacy | null = null;
-  results.forEach(p => { // All pharmacies in `results` are in stock
-        if (!bestOption) {
-            bestOption = p;
-        } else {
-             // A balance of closer distance and lower price
-            if (p.distance < bestOption.distance && p.price < bestOption.price + 10) { // Prioritize closer if price is comparable
-                bestOption = p;
-            } else if (p.price < bestOption.price && p.distance < bestOption.distance + 2) { // Prioritize cheaper if distance is comparable
-                bestOption = p;
-            }
-        }
+  if (availablePharmacies.length > 0) {
+    // Use a scoring system to find the best balance of distance and price.
+    // A lower score is better. We'll value 1km of distance as being equivalent to ?10.
+    bestOption = availablePharmacies.reduce((best, current) => {
+        const bestScore = (best.distance * 10) + best.price;
+        const currentScore = (current.distance * 10) + current.price;
+        return currentScore < bestScore ? current : best;
     });
+  }
 
+  // Mark the best option within the combined results list.
   if (bestOption) {
-    const bestOptionIndex = results.findIndex(p => p.id === bestOption!.id);
+    const bestOptionIndex = combinedResults.findIndex(p => p.id === bestOption!.id);
     if (bestOptionIndex > -1) {
-      results[bestOptionIndex].isBestOption = true;
+      combinedResults[bestOptionIndex].isBestOption = true;
     }
   }
   
-  return results;
+  // Return the combined list. The App component will handle the final sorting based on user preference.
+  return combinedResults;
 };

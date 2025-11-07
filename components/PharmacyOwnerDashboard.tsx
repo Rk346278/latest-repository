@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import type { PharmacyOwner, InventoryItem } from '../types';
 import { StockStatus } from '../types';
@@ -7,13 +8,40 @@ interface PharmacyOwnerDashboardProps {
   owner: PharmacyOwner;
   inventory: InventoryItem[];
   onLogout: () => void;
-  onItemAdd: (newItem: Omit<InventoryItem, 'stock'>) => void;
+  onSwitchAccount: () => void;
+  onItemAdd: (newItem: InventoryItem) => void;
   onSlipUpload: (file: File) => Promise<void>;
   onStockStatusChange: (medicineName: string, newStatus: StockStatus) => void;
   onItemDelete: (medicineName: string) => void;
 }
 
-export const PharmacyOwnerDashboard: React.FC<PharmacyOwnerDashboardProps> = ({ owner, inventory, onLogout, onItemAdd, onSlipUpload, onStockStatusChange, onItemDelete }) => {
+const StockStatusSelector: React.FC<{
+    selected: StockStatus;
+    onChange: (status: StockStatus) => void;
+    idPrefix?: string;
+}> = ({ selected, onChange, idPrefix = 'stock-selector' }) => (
+    <div className="flex items-center gap-1.5 p-1 bg-gray-700/50 rounded-full">
+        <button
+            type="button"
+            id={`${idPrefix}-${StockStatus.Available}`}
+            onClick={() => onChange(StockStatus.Available)}
+            className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${selected === StockStatus.Available ? 'bg-green-500 text-white shadow' : 'text-gray-300 hover:bg-gray-600'}`}
+        >
+            Available
+        </button>
+        <button
+            type="button"
+            id={`${idPrefix}-${StockStatus.Unavailable}`}
+            onClick={() => onChange(StockStatus.Unavailable)}
+            className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${selected === StockStatus.Unavailable ? 'bg-red-500 text-white shadow' : 'text-gray-300 hover:bg-gray-600'}`}
+        >
+            Unavailable
+        </button>
+    </div>
+);
+
+
+export const PharmacyOwnerDashboard: React.FC<PharmacyOwnerDashboardProps> = ({ owner, inventory, onLogout, onSwitchAccount, onItemAdd, onSlipUpload, onStockStatusChange, onItemDelete }) => {
     const [newMedicineName, setNewMedicineName] = useState('');
     const [newMedicinePrice, setNewMedicinePrice] = useState('');
     const [isParsing, setIsParsing] = useState(false);
@@ -26,6 +54,7 @@ export const PharmacyOwnerDashboard: React.FC<PharmacyOwnerDashboardProps> = ({ 
             onItemAdd({
                 medicineName: newMedicineName.trim(),
                 price: parseFloat(newMedicinePrice),
+                stock: StockStatus.Available,
             });
             setNewMedicineName('');
             setNewMedicinePrice('');
@@ -62,39 +91,51 @@ export const PharmacyOwnerDashboard: React.FC<PharmacyOwnerDashboardProps> = ({ 
                     <h1 className="text-3xl md:text-4xl font-extrabold text-white">{owner.name}</h1>
                     <p className="text-gray-400 mt-1">{owner.address}</p>
                 </div>
-                <button
-                    onClick={onLogout}
-                    className="px-6 py-3 bg-[#1E1E1E] border border-gray-700 text-white font-bold rounded-full shadow-lg hover:bg-red-500/80 hover:border-red-500 transition-all duration-300 transform hover:scale-105"
-                >
-                    Log Out
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                        onClick={onSwitchAccount}
+                        className="px-4 py-2 bg-[#1E1E1E] border border-gray-700 text-gray-300 font-semibold text-sm rounded-full hover:bg-gray-700 transition-all"
+                    >
+                        Switch Account
+                    </button>
+                    <button
+                        onClick={onLogout}
+                        className="px-6 py-2 bg-[#1E1E1E] border border-gray-700 text-white font-bold rounded-full shadow-lg hover:bg-red-500/80 hover:border-red-500 transition-all duration-300"
+                    >
+                        Log Out
+                    </button>
+                </div>
             </div>
             
             <div className="bg-[#1E1E1E] p-6 rounded-2xl shadow-2xl shadow-teal-900/20">
-                <h2 className="text-2xl font-bold text-white mb-4">Manage Your Inventory</h2>
+                <h2 className="text-2xl font-bold text-white mb-4">Add New Medicine</h2>
 
-                <form onSubmit={handleAddItem} className="flex flex-col sm:flex-row gap-4">
-                    <input
-                        type="text"
-                        value={newMedicineName}
-                        onChange={(e) => setNewMedicineName(e.target.value)}
-                        placeholder="Medicine Name (e.g., Paracetamol 500mg)"
-                        className="flex-grow bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
-                        required
-                    />
-                    <input
-                        type="number"
-                        value={newMedicinePrice}
-                        onChange={(e) => setNewMedicinePrice(e.target.value)}
-                        placeholder="Price (₹)"
-                        className="w-full sm:w-32 bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
-                        required
-                        min="0"
-                        step="0.01"
-                    />
-                    <button type="submit" className="px-6 py-3 bg-teal-500 text-white font-bold rounded-full shadow-lg shadow-teal-500/30 hover:bg-teal-400 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-teal-300">
-                        Add Medicine
-                    </button>
+                <form onSubmit={handleAddItem} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input
+                            type="text"
+                            value={newMedicineName}
+                            onChange={(e) => setNewMedicineName(e.target.value)}
+                            placeholder="Medicine Name (e.g., Paracetamol 500mg)"
+                            className="bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
+                            required
+                        />
+                        <input
+                            type="number"
+                            value={newMedicinePrice}
+                            onChange={(e) => setNewMedicinePrice(e.target.value)}
+                            placeholder="Price (₹)"
+                            className="bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
+                            required
+                            min="0"
+                            step="0.01"
+                        />
+                    </div>
+                     <div className="flex justify-end pt-2">
+                        <button type="submit" className="w-full sm:w-auto px-8 py-3 bg-teal-500 text-white font-bold rounded-full shadow-lg shadow-teal-500/30 hover:bg-teal-400 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-teal-300">
+                            Add to Inventory
+                        </button>
+                    </div>
                 </form>
 
                 <div className="my-6">
@@ -127,6 +168,7 @@ export const PharmacyOwnerDashboard: React.FC<PharmacyOwnerDashboardProps> = ({ 
 
 
                 <div className="border-t border-gray-700 pt-6">
+                    <h3 className="text-xl font-bold text-white mb-4">Current Inventory ({inventory.length})</h3>
                     {inventory.length > 0 ? (
                          <ul className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
                              {inventory.sort((a,b) => a.medicineName.localeCompare(b.medicineName)).map((item, index) => (
@@ -139,20 +181,7 @@ export const PharmacyOwnerDashboard: React.FC<PharmacyOwnerDashboardProps> = ({ 
                                         </div>
                                      </div>
                                      <div className="flex items-center gap-2 self-end sm:self-center">
-                                         <div className="flex items-center gap-1.5 p-1 bg-gray-700/50 rounded-full">
-                                            <button
-                                                onClick={() => onStockStatusChange(item.medicineName, StockStatus.InStock)}
-                                                className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${item.stock === StockStatus.InStock ? 'bg-green-500 text-white shadow' : 'text-gray-300 hover:bg-gray-600'}`}
-                                            >
-                                                Available
-                                            </button>
-                                            <button
-                                                onClick={() => onStockStatusChange(item.medicineName, StockStatus.OutOfStock)}
-                                                className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${item.stock === StockStatus.OutOfStock ? 'bg-red-500 text-white shadow' : 'text-gray-300 hover:bg-gray-600'}`}
-                                            >
-                                                Unavailable
-                                            </button>
-                                        </div>
+                                         <StockStatusSelector selected={item.stock} onChange={(newStatus) => onStockStatusChange(item.medicineName, newStatus)} idPrefix={`item-${index}`} />
                                         <button onClick={() => onItemDelete(item.medicineName)} className="p-2 text-gray-500 hover:text-red-400 rounded-full hover:bg-red-500/10 transition-colors" aria-label={`Delete ${item.medicineName}`}>
                                             <TrashIcon className="h-5 w-5"/>
                                         </button>

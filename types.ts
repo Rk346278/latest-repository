@@ -1,7 +1,13 @@
+
 export enum StockStatus {
-  InStock = 'In Stock',
-  LowStock = 'Low Stock',
-  OutOfStock = 'Out of Stock',
+  Available = 'Available',
+  Unavailable = 'Unavailable',
+}
+
+export interface AlternativeMedicine {
+  name: string;
+  price: number;
+  priceUnit: string;
 }
 
 export interface Pharmacy {
@@ -16,6 +22,7 @@ export interface Pharmacy {
   phone: string;
   lat: number;
   lon: number;
+  alternative?: AlternativeMedicine;
 }
 
 export type SortKey = 'price' | 'distance' | 'availability';

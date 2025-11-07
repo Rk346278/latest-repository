@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SearchIcon, CameraIcon, MicIcon, PillIcon } from './icons';
-import { parsePrescription, getMedicineSuggestions } from '../services/geminiService';
+import { parsePrescription } from '../services/geminiService';
 
 interface HomePageProps {
   onMedicineSearch: (query: string) => void;
@@ -37,44 +37,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onMedicineSearch, onDiseaseS
   const [activeTab, setActiveTab] = useState<'medicine' | 'disease'>('medicine');
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
-  const searchContainerRef = useRef<HTMLDivElement>(null);
-
-  // Debounce logic for fetching suggestions
-  useEffect(() => {
-    if (medicineQuery.trim().length < 3) {
-      setSuggestions([]);
-      return;
-    }
-
-    setIsSuggestionsLoading(true);
-    const debounceTimer = setTimeout(async () => {
-      const newSuggestions = await getMedicineSuggestions(medicineQuery);
-      setSuggestions(newSuggestions);
-      setIsSuggestionsLoading(false);
-    }, 300); // 300ms debounce delay
-
-    return () => clearTimeout(debounceTimer);
-  }, [medicineQuery]);
-
-  // Close suggestions when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
-        setSuggestions([]);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const handleSuggestionClick = (suggestion: string) => {
-    setMedicineQuery(suggestion);
-    setSuggestions([]); // Hide suggestions after selection
-  };
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -102,7 +64,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onMedicineSearch, onDiseaseS
   
   const handleMedicineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSuggestions([]);
     onMedicineSearch(medicineQuery);
   };
 
@@ -113,8 +74,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onMedicineSearch, onDiseaseS
   
   const handleTabChange = (tab: 'medicine' | 'disease') => {
     setActiveTab(tab);
-    setSuggestions([]);
-    setIsSuggestionsLoading(false);
   };
 
 
@@ -139,7 +98,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onMedicineSearch, onDiseaseS
 
         {activeTab === 'medicine' ? (
              <div className="bg-[#1E1E1E] rounded-b-2xl rounded-tr-2xl shadow-2xl shadow-teal-900/20 p-2 transition-all">
-                <div className="relative" ref={searchContainerRef}>
+                <div className="relative">
                     <form onSubmit={handleMedicineSubmit} className="flex items-center">
                         <SearchIcon className="h-6 w-6 text-gray-500 ml-4" />
                         <input
@@ -164,25 +123,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onMedicineSearch, onDiseaseS
                             </button>
                         </div>
                     </form>
-                    {(suggestions.length > 0 || isSuggestionsLoading) && (
-                        <div className="absolute top-full left-0 right-0 bg-[#2a2a2a] border border-gray-700 rounded-b-lg shadow-lg z-10 animate-fade-in-down max-h-60 overflow-y-auto">
-                            {isSuggestionsLoading && <div className="p-4 text-center text-gray-400">Loading...</div>}
-                            {!isSuggestionsLoading && (
-                            <ul>
-                                {suggestions.map((suggestion, index) => (
-                                <li key={index}>
-                                    <button
-                                    onClick={() => handleSuggestionClick(suggestion)}
-                                    className="w-full text-left px-6 py-3 text-white hover:bg-teal-500/20 transition-colors"
-                                    >
-                                    {suggestion}
-                                    </button>
-                                </li>
-                                ))}
-                            </ul>
-                            )}
-                        </div>
-                    )}
                 </div>
                  <button 
                     onClick={handleMedicineSubmit}

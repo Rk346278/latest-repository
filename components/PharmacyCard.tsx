@@ -1,7 +1,8 @@
+
 import React from 'react';
 import type { Pharmacy } from '../types';
 import { StockStatus } from '../types';
-import { StarIcon } from './icons';
+import { StarIcon, PillIcon } from './icons';
 
 interface PharmacyCardProps {
   pharmacy: Pharmacy;
@@ -10,11 +11,9 @@ interface PharmacyCardProps {
 
 const getStockColor = (stock: StockStatus) => {
   switch (stock) {
-    case StockStatus.InStock:
+    case StockStatus.Available:
       return 'bg-green-500 text-green-900';
-    case StockStatus.LowStock:
-      return 'bg-yellow-500 text-yellow-900';
-    case StockStatus.OutOfStock:
+    case StockStatus.Unavailable:
       return 'bg-red-500 text-red-900';
     default:
       return 'bg-gray-500 text-gray-900';
@@ -41,10 +40,12 @@ export const PharmacyCard: React.FC<PharmacyCardProps> = ({ pharmacy, onClick })
       
       <div className="flex justify-between items-start">
         <h3 className="font-bold text-lg text-white pr-16">{name}</h3>
-        <div className="text-right">
-            <p className="text-xl font-extrabold text-cyan-400 whitespace-nowrap">₹{price.toFixed(2)}</p>
-            <p className="text-xs text-gray-400 whitespace-nowrap">{priceUnit}</p>
-        </div>
+         {stock === StockStatus.Available && (
+            <div className="text-right">
+                <p className="text-xl font-extrabold text-cyan-400 whitespace-nowrap">₹{price.toFixed(2)}</p>
+                <p className="text-xs text-gray-400 whitespace-nowrap">{priceUnit}</p>
+            </div>
+        )}
       </div>
 
       <div className="mt-4 flex justify-between items-center text-sm">

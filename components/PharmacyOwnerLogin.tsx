@@ -1,13 +1,18 @@
+
 import React, { useState } from 'react';
 import type { PharmacyOwner } from '../types';
 import { reverseGeocode, geocodeAddress } from '../services/geminiService';
 import { MapPinIcon } from './icons';
 
+type EnrichedPharmacyOwner = PharmacyOwner & { id: number };
+
 interface PharmacyOwnerLoginProps {
   onLogin: (details: PharmacyOwner, location: { lat: number, lon: number }) => void;
+  savedOwners: EnrichedPharmacyOwner[];
+  onOwnerSelect: (owner: EnrichedPharmacyOwner) => void;
 }
 
-export const PharmacyOwnerLogin: React.FC<PharmacyOwnerLoginProps> = ({ onLogin }) => {
+export const PharmacyOwnerLogin: React.FC<PharmacyOwnerLoginProps> = ({ onLogin, savedOwners, onOwnerSelect }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -15,6 +20,7 @@ export const PharmacyOwnerLogin: React.FC<PharmacyOwnerLoginProps> = ({ onLogin 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [location, setLocation] = useState<{ lat: number, lon: number } | null>(null);
+  const [showRegistrationForm, setShowRegistrationForm] = useState(savedOwners.length === 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +31,6 @@ export const PharmacyOwnerLogin: React.FC<PharmacyOwnerLoginProps> = ({ onLogin 
     try {
         let coords = location;
         if (!coords) {
-            // Address was entered manually or location was not fetched, so geocode it
             coords = await geocodeAddress(address);
         }
         
@@ -51,7 +56,6 @@ export const PharmacyOwnerLogin: React.FC<PharmacyOwnerLoginProps> = ({ onLogin 
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setAddress(e.target.value);
-    // Clear cached coordinates if address is manually changed
     setLocation(null);
   };
   
@@ -94,86 +98,118 @@ export const PharmacyOwnerLogin: React.FC<PharmacyOwnerLoginProps> = ({ onLogin 
         <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-4">
             Welcome, Pharmacy Owner
         </h1>
-        <p className="max-w-xl text-lg text-gray-400 mb-8">
-            Please enter your pharmacy details to manage your inventory and connect with customers.
-        </p>
 
-        <form onSubmit={handleSubmit} className="w-full max-w-lg bg-[#1E1E1E] p-8 rounded-2xl shadow-2xl shadow-teal-900/20 space-y-6">
-            <div>
-                <label htmlFor="pharmacyName" className="block text-left text-sm font-bold text-gray-300 mb-2">
-                    Pharmacy Name
-                </label>
-                <input
-                    id="pharmacyName"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g., Apollo Pharmacy"
-                    required
-                    className="w-full bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
-                />
-            </div>
-            <div>
-                <label htmlFor="phone" className="block text-left text-sm font-bold text-gray-300 mb-2">
-                    Phone Number
-                </label>
-                <input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={handlePhoneChange}
-                    placeholder="Enter 10-digit number"
-                    required
-                    maxLength={10}
-                    pattern="\d{10}"
-                    title="Phone number must be 10 digits."
-                    className="w-full bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
-                />
-            </div>
-            <div>
-                 <div className="flex justify-between items-center mb-2">
-                    <label htmlFor="address" className="block text-left text-sm font-bold text-gray-300">
-                        Full Address
-                    </label>
-                    <button
-                        type="button"
-                        onClick={handleLocationClick}
-                        disabled={isFetchingLocation}
-                        className="flex items-center gap-1.5 text-sm text-teal-400 hover:text-teal-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {isFetchingLocation ? (
-                            <>
-                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                <span>Fetching...</span>
-                            </>
-                        ) : (
-                            <>
-                                <MapPinIcon className="h-4 w-4" />
-                                <span>Use My Current Location</span>
-                            </>
-                        )}
-                    </button>
+        {!showRegistrationForm && savedOwners.length > 0 ? (
+           <div className="w-full max-w-lg">
+                <p className="max-w-xl text-lg text-gray-400 mb-8">
+                    Select your pharmacy to continue or register a new one.
+                </p>
+                <div className="bg-[#1E1E1E] p-8 rounded-2xl shadow-2xl shadow-teal-900/20 space-y-4">
+                    <h2 className="text-xl font-bold text-white text-left">Previously Logged In</h2>
+                    {savedOwners.map(owner => (
+                        <button
+                            key={owner.id}
+                            onClick={() => onOwnerSelect(owner)}
+                            className="w-full text-left p-4 bg-[#2a2a2a] rounded-lg hover:bg-teal-500/20 transition-all duration-200"
+                        >
+                            <span className="font-bold text-lg text-white">{owner.name}</span>
+                            <span className="block text-sm text-gray-400 mt-1">{owner.address}</span>
+                        </button>
+                    ))}
+                    <div className="pt-4 border-t border-gray-700/50">
+                        <button
+                            onClick={() => setShowRegistrationForm(true)}
+                            className="w-full text-center py-3 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition-all"
+                        >
+                            Register a New Pharmacy
+                        </button>
+                    </div>
                 </div>
-                <textarea
-                    id="address"
-                    value={address}
-                    onChange={handleAddressChange}
-                    placeholder="Enter your pharmacy's full address"
-                    required
-                    rows={3}
-                    className="w-full bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
-                />
-                 {locationError && <p className="text-red-400 text-xs mt-1 text-left">{locationError}</p>}
             </div>
+        ) : (
+            <>
+                <p className="max-w-xl text-lg text-gray-400 mb-8">
+                    Please enter your pharmacy details to manage your inventory and connect with customers.
+                </p>
 
-            <button
-                type="submit"
-                className="w-full px-10 py-4 bg-teal-500 text-white font-bold text-lg rounded-full shadow-lg shadow-teal-500/30 hover:bg-teal-400 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-teal-300 disabled:bg-gray-500 disabled:shadow-none disabled:scale-100"
-                disabled={!isFormValid || isSubmitting || isFetchingLocation}
-            >
-                {isSubmitting ? 'Verifying...' : 'Continue to Dashboard'}
-            </button>
-        </form>
+                <form onSubmit={handleSubmit} className="w-full max-w-lg bg-[#1E1E1E] p-8 rounded-2xl shadow-2xl shadow-teal-900/20 space-y-6">
+                    <div>
+                        <label htmlFor="pharmacyName" className="block text-left text-sm font-bold text-gray-300 mb-2">
+                            Pharmacy Name
+                        </label>
+                        <input
+                            id="pharmacyName"
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g., Apollo Pharmacy"
+                            required
+                            className="w-full bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="phone" className="block text-left text-sm font-bold text-gray-300 mb-2">
+                            Phone Number
+                        </label>
+                        <input
+                            id="phone"
+                            type="tel"
+                            value={phone}
+                            onChange={handlePhoneChange}
+                            placeholder="Enter 10-digit number"
+                            required
+                            maxLength={10}
+                            pattern="\d{10}"
+                            title="Phone number must be 10 digits."
+                            className="w-full bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
+                        />
+                    </div>
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                            <label htmlFor="address" className="block text-left text-sm font-bold text-gray-300">
+                                Full Address
+                            </label>
+                            <button
+                                type="button"
+                                onClick={handleLocationClick}
+                                disabled={isFetchingLocation}
+                                className="flex items-center gap-1.5 text-sm text-teal-400 hover:text-teal-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {isFetchingLocation ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Fetching...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <MapPinIcon className="h-4 w-4" />
+                                        <span>Use My Current Location</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                        <textarea
+                            id="address"
+                            value={address}
+                            onChange={handleAddressChange}
+                            placeholder="Enter your pharmacy's full address"
+                            required
+                            rows={3}
+                            className="w-full bg-[#2a2a2a] text-white placeholder-gray-500 border border-gray-600 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition-all"
+                        />
+                        {locationError && <p className="text-red-400 text-xs mt-1 text-left">{locationError}</p>}
+                    </div>
+
+                    <button
+                        type="submit"
+                        className="w-full px-10 py-4 bg-teal-500 text-white font-bold text-lg rounded-full shadow-lg shadow-teal-500/30 hover:bg-teal-400 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-teal-300 disabled:bg-gray-500 disabled:shadow-none disabled:scale-100"
+                        disabled={!isFormValid || isSubmitting || isFetchingLocation}
+                    >
+                        {isSubmitting ? 'Verifying...' : 'Continue to Dashboard'}
+                    </button>
+                </form>
+            </>
+        )}
          <style>{`
             @keyframes fade-in {
                 from { opacity: 0; transform: translateY(10px); }

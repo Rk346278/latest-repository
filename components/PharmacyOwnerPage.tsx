@@ -7,7 +7,8 @@ import { PharmacyOwnerDashboard } from './PharmacyOwnerDashboard';
 import { updateGlobalInventory, deleteFromGlobalInventory, registerOrGetPharmacy, updateStockStatusInGlobalInventory } from '../services/pharmacyService';
 import { parsePriceSlip } from '../services/geminiService';
 
-const OWNER_DETAILS_KEY = 'pharmacyOwnerDetails';
+const ALL_OWNERS_KEY = 'pharmacyOwnersList';
+const ACTIVE_OWNER_ID_KEY = 'activePharmacyOwnerId';
 const INVENTORY_KEY = 'pharmacyInventory';
 
 // The owner object we store will have an ID for stable reference
@@ -26,25 +27,22 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 };
 
 export const PharmacyOwnerPage: React.FC = () => {
-    const [owner, setOwner] = useState<EnrichedPharmacyOwner | null>(null);
+    const [activeOwner, setActiveOwner] = useState<EnrichedPharmacyOwner | null>(null);
+    const [savedOwners, setSavedOwners] = useState<EnrichedPharmacyOwner[]>([]);
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
 
     useEffect(() => {
         try {
-            const storedOwner = localStorage.getItem(OWNER_DETAILS_KEY);
-            if (storedOwner) {
-                const parsedOwner: EnrichedPharmacyOwner = JSON.parse(storedOwner);
-                setOwner(parsedOwner);
-                
-                const storedInventory = localStorage.getItem(`${INVENTORY_KEY}_${parsedOwner.id}`);
-                if (storedInventory) {
-                    const parsedInventory: InventoryItem[] = JSON.parse(storedInventory);
-                    // Data migration for older items without a stock property
-                    const migratedInventory = parsedInventory.map(item => ({
-                        ...item,
-                        stock: item.stock || StockStatus.InStock 
-                    }));
-                    setInventory(migratedInventory);
+            const storedOwners = localStorage.getItem(ALL_OWNERS_KEY);
+            const allOwners: EnrichedPharmacyOwner[] = storedOwners ? JSON.parse(storedOwners) : [];
+            setSavedOwners(allOwners);
+
+            const activeOwnerIdStr = localStorage.getItem(ACTIVE_OWNER_ID_KEY);
+            if (activeOwnerIdStr) {
+                const activeOwnerId = parseInt(activeOwnerIdStr, 10);
+                const owner = allOwners.find(o => o.id === activeOwnerId);
+                if (owner) {
+                    setActiveOwner(owner);
                 }
             }
         } catch (error) {
@@ -52,68 +50,93 @@ export const PharmacyOwnerPage: React.FC = () => {
         }
     }, []);
 
+    useEffect(() => {
+        if (activeOwner) {
+            try {
+                const storedInventory = localStorage.getItem(`${INVENTORY_KEY}_${activeOwner.id}`);
+                if (storedInventory) {
+                    const parsedInventory: InventoryItem[] = JSON.parse(storedInventory);
+                    // Data migration for older items to the new 'Available'/'Unavailable' stock system.
+                    const migratedInventory = parsedInventory.map(item => ({
+                        ...item,
+                        stock: (item.stock as any) === 'Out of Stock' ? StockStatus.Unavailable : StockStatus.Available
+                    }));
+                    setInventory(migratedInventory);
+                } else {
+                    setInventory([]);
+                }
+            } catch (error) {
+                console.error("Failed to load inventory from local storage", error);
+            }
+        } else {
+            setInventory([]);
+        }
+    }, [activeOwner]);
+
     const handleLogin = async (details: PharmacyOwner, location: { lat: number, lon: number }) => {
         try {
             const pharmacy = await registerOrGetPharmacy(details, location);
-            const enrichedOwner: EnrichedPharmacyOwner = { ...details, id: pharmacy.id };
+            const newOwner: EnrichedPharmacyOwner = { ...details, id: pharmacy.id };
             
-            localStorage.setItem(OWNER_DETAILS_KEY, JSON.stringify(enrichedOwner));
-            setOwner(enrichedOwner);
-            
-            const storedInventory = localStorage.getItem(`${INVENTORY_KEY}_${pharmacy.id}`);
-            if (storedInventory) {
-                const parsedInventory: InventoryItem[] = JSON.parse(storedInventory);
-                const migratedInventory = parsedInventory.map(item => ({
-                    ...item,
-                    stock: item.stock || StockStatus.InStock
-                }));
-                setInventory(migratedInventory);
+            const updatedOwners = [...savedOwners];
+            const existingOwnerIndex = updatedOwners.findIndex(o => o.id === newOwner.id);
+            if (existingOwnerIndex > -1) {
+                updatedOwners[existingOwnerIndex] = newOwner;
             } else {
-                setInventory([]);
+                updatedOwners.push(newOwner);
             }
+            
+            localStorage.setItem(ALL_OWNERS_KEY, JSON.stringify(updatedOwners));
+            setSavedOwners(updatedOwners);
+            
+            localStorage.setItem(ACTIVE_OWNER_ID_KEY, newOwner.id.toString());
+            setActiveOwner(newOwner);
         } catch (error) {
-            console.error("Failed to register pharmacy or load inventory", error);
+            console.error("Failed to register pharmacy or login", error);
         }
+    };
+
+    const handleOwnerSelect = (owner: EnrichedPharmacyOwner) => {
+        localStorage.setItem(ACTIVE_OWNER_ID_KEY, owner.id.toString());
+        setActiveOwner(owner);
     };
 
     const handleLogout = () => {
         try {
-            localStorage.removeItem(OWNER_DETAILS_KEY);
+            localStorage.removeItem(ACTIVE_OWNER_ID_KEY);
         } catch (error) {
-            console.error("Failed to remove owner details from local storage", error);
+            console.error("Failed to remove active owner from local storage", error);
         }
-        setOwner(null);
-        setInventory([]);
+        setActiveOwner(null);
     };
     
-    const handleItemAdd = async (newItem: Omit<InventoryItem, 'stock'>) => {
-        if (!owner) return;
+    const handleItemAdd = async (newItem: InventoryItem) => {
+        if (!activeOwner) return;
         
-        const pharmacyId = owner.id;
-        const fullNewItem: InventoryItem = { ...newItem, stock: StockStatus.InStock };
+        const pharmacyId = activeOwner.id;
         
         const updatedInventory = [...inventory];
         const existingIndex = updatedInventory.findIndex(
-            item => item.medicineName.toLowerCase() === fullNewItem.medicineName.toLowerCase()
+            item => item.medicineName.toLowerCase() === newItem.medicineName.toLowerCase()
         );
 
         if (existingIndex > -1) {
-            updatedInventory[existingIndex] = fullNewItem; // Update price and stock if it exists
+            updatedInventory[existingIndex] = newItem; // Update price and stock if it exists
         } else {
-            updatedInventory.push(fullNewItem);
+            updatedInventory.push(newItem);
         }
 
         try {
             localStorage.setItem(`${INVENTORY_KEY}_${pharmacyId}`, JSON.stringify(updatedInventory));
             setInventory(updatedInventory);
-            await updateGlobalInventory(pharmacyId, [fullNewItem]);
+            await updateGlobalInventory(pharmacyId, [newItem]);
         } catch (error) {
             console.error("Failed to save inventory", error);
         }
     };
 
     const handleSlipUpload = async (file: File) => {
-        if (!owner) return;
+        if (!activeOwner) return;
         
         try {
             const base64 = await blobToBase64(file);
@@ -123,7 +146,7 @@ export const PharmacyOwnerPage: React.FC = () => {
                 throw new Error("No medicines could be identified from the image. Please try again with a clearer image.");
             }
 
-            const pharmacyId = owner.id;
+            const pharmacyId = activeOwner.id;
             
             const updatedInventory = [...inventory];
             parsedItems.forEach(newItem => {
@@ -148,8 +171,8 @@ export const PharmacyOwnerPage: React.FC = () => {
     };
 
     const handleStockStatusChange = async (medicineName: string, newStatus: StockStatus) => {
-        if (!owner) return;
-        const pharmacyId = owner.id;
+        if (!activeOwner) return;
+        const pharmacyId = activeOwner.id;
 
         const updatedInventory = inventory.map(item => 
             item.medicineName.toLowerCase() === medicineName.toLowerCase()
@@ -168,9 +191,9 @@ export const PharmacyOwnerPage: React.FC = () => {
 
 
     const handleItemDelete = async (medicineNameToDelete: string) => {
-         if (!owner) return;
+         if (!activeOwner) return;
 
-         const pharmacyId = owner.id;
+         const pharmacyId = activeOwner.id;
          
         const updatedInventory = inventory.filter(
             item => item.medicineName.toLowerCase() !== medicineNameToDelete.toLowerCase()
@@ -186,18 +209,19 @@ export const PharmacyOwnerPage: React.FC = () => {
 
     return (
         <div className="container mx-auto max-w-4xl">
-            {owner ? (
+            {activeOwner ? (
                 <PharmacyOwnerDashboard 
-                    owner={owner} 
+                    owner={activeOwner} 
                     inventory={inventory} 
                     onLogout={handleLogout}
+                    onSwitchAccount={handleLogout}
                     onItemAdd={handleItemAdd}
                     onSlipUpload={handleSlipUpload}
                     onStockStatusChange={handleStockStatusChange}
                     onItemDelete={handleItemDelete}
                 />
             ) : (
-                <PharmacyOwnerLogin onLogin={handleLogin} />
+                <PharmacyOwnerLogin onLogin={handleLogin} savedOwners={savedOwners} onOwnerSelect={handleOwnerSelect} />
             )}
         </div>
     );

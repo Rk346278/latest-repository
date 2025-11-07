@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Type } from "@google/genai";
 // Fix: Added StockStatus to the import to be used in mock data.
 import { InventoryItem, StockStatus } from "../types";
@@ -58,11 +59,11 @@ export const parsePriceSlip = async (imageBase64: string): Promise<InventoryItem
     // Return a mock response for demonstration purposes
     return [
       // Fix: Added missing 'stock' property to satisfy the InventoryItem type.
-      { medicineName: 'Dolo 650', price: 31.00, stock: StockStatus.InStock },
+      { medicineName: 'Dolo 650', price: 31.00, stock: StockStatus.Available },
       // Fix: Added missing 'stock' property to satisfy the InventoryItem type.
-      { medicineName: 'Aspirin 75mg', price: 15.50, stock: StockStatus.InStock },
+      { medicineName: 'Aspirin 75mg', price: 15.50, stock: StockStatus.Available },
       // Fix: Added missing 'stock' property to satisfy the InventoryItem type.
-      { medicineName: 'Cetirizine 10mg', price: 25.00, stock: StockStatus.InStock },
+      { medicineName: 'Cetirizine 10mg', price: 25.00, stock: StockStatus.Available },
     ];
   }
 
@@ -99,7 +100,7 @@ export const parsePriceSlip = async (imageBase64: string): Promise<InventoryItem
     const jsonString = response.text.trim();
     if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
       const result: Omit<InventoryItem, 'stock'>[] = JSON.parse(jsonString);
-      return result.map(item => ({...item, stock: StockStatus.InStock}));
+      return result.map(item => ({...item, stock: StockStatus.Available}));
     }
     console.error("Gemini API returned non-JSON response:", jsonString);
     return [];
@@ -158,10 +159,11 @@ export const validateMedicineName = async (medicineName: string): Promise<{ vali
     console.error("Gemini API key not configured.");
     // Mock response for demonstration
     const lowerCaseName = medicineName.toLowerCase();
-    const knownMedicines = ['paracetamol', 'ibuprofen', 'metformin', 'aspirin', 'atorvastatin', 'amoxicillin', 'cetirizine', 'metformin 500mg', 'dolo 650'];
+    const knownMedicines = ['paracetamol', 'ibuprofen', 'metformin', 'aspirin', 'atorvastatin', 'amoxicillin', 'cetirizine', 'metformin 500mg', 'dolo 650', 'crocin 650'];
     
     if (knownMedicines.includes(lowerCaseName)) {
-        const properName = lowerCaseName === 'dolo 650' ? 'Dolo 650' : medicineName.charAt(0).toUpperCase() + medicineName.slice(1).toLowerCase();
+        const properNameMappings: {[key: string]: string} = {'dolo 650': 'Dolo 650', 'crocin 650': 'Crocin 650'};
+        const properName = properNameMappings[lowerCaseName] || medicineName.charAt(0).toUpperCase() + medicineName.slice(1).toLowerCase();
         return { valid: true, correctedName: properName, reason: '' };
     }
     if (lowerCaseName === 'paracetmol') {
@@ -214,58 +216,6 @@ export const validateMedicineName = async (medicineName: string): Promise<{ vali
 };
 
 /**
- * Gets medicine name autocomplete suggestions based on user input.
- * @param query The partial medicine name typed by the user.
- * @returns A promise that resolves to an array of suggestion strings.
- */
-export const getMedicineSuggestions = async (query: string): Promise<string[]> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Mock response for demonstration
-    const mockSuggestions: { [key: string]: string[] } = {
-      'para': ['Paracetamol', 'Paracetamol 500mg', 'Paracetamol 650mg'],
-      'ibu': ['Ibuprofen', 'Ibuprofen 400mg'],
-      'met': ['Metformin', 'Metformin 500mg', 'Methotrexate'],
-      'dolo': ['Dolo 650'],
-    };
-    const key = Object.keys(mockSuggestions).find(k => query.toLowerCase().startsWith(k));
-    return key ? mockSuggestions[key] : [];
-  }
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `Based on the user's partial input, provide up to 5 common medicine names that start with these letters.
-        User input: "${query}"
-        Provide the response as a JSON array of strings. For example, for "para", return ["Paracetamol", "Paracetamol 500mg"].
-      `,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.STRING,
-            description: "A medicine name suggestion."
-          }
-        },
-      },
-    });
-
-    const jsonString = response.text.trim();
-    if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
-      const result = JSON.parse(jsonString);
-      return result;
-    }
-    return [];
-
-  } catch (error) {
-    console.error("Error getting medicine suggestions with Gemini API:", error);
-    return [];
-  }
-};
-
-
-/**
  * Gets a simple, user-friendly description of a medicine.
  * @param medicineName The name of the medicine.
  * @returns A promise that resolves to a description string.
@@ -290,6 +240,40 @@ export const getMedicineDescription = async (medicineName: string): Promise<stri
   } catch (error) {
     console.error("Error getting medicine description from Gemini API:", error);
     return `Could not load information for ${medicineName}.`;
+  }
+};
+
+/**
+ * Gets a common alternative for a given medicine.
+ * @param medicineName The name of the medicine for which to find an alternative.
+ * @returns A promise that resolves to the name of an alternative medicine, or an empty string.
+ */
+export const getMedicineAlternative = async (medicineName: string): Promise<string> => {
+  if (!ai) {
+    console.error("Gemini API key not configured.");
+    // Mock response for demonstration
+    const lowerCaseName = medicineName.toLowerCase();
+    if (lowerCaseName.includes('paracetamol')) {
+      return 'Ibuprofen';
+    }
+    if (lowerCaseName.includes('dolo 650')) {
+        return 'Crocin 650';
+    }
+    if (lowerCaseName.includes('ibuprofen')) {
+        return 'Paracetamol';
+    }
+    return "";
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `What is a single, common, and widely available alternative or substitute medicine for "${medicineName}"? Provide only the name of the medicine. For example, for "Aspirin", a good answer would be "Ibuprofen".`,
+    });
+    return response.text.trim();
+  } catch (error) {
+    console.error("Error getting medicine alternative from Gemini API:", error);
+    return "";
   }
 };
 
