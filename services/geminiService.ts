@@ -1,15 +1,26 @@
 
-
 import { GoogleGenAI, Type } from "@google/genai";
-// Fix: Added StockStatus to the import to be used in mock data.
 import { InventoryItem, StockStatus } from "../types";
 
-// This is a placeholder for the actual Gemini API key
-// In a real production environment, this should be handled securely and not hardcoded.
 const API_KEY = process.env.API_KEY;
 
-// Ensure API_KEY is available before initializing
 const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
+
+if (!API_KEY) {
+    console.warn("Gemini API key not configured. Please ensure the API_KEY environment variable is set and accessible in your deployment environment. The application will not work correctly.");
+}
+
+/**
+ * Checks if the Gemini API is initialized and throws an error if not.
+ * @returns The initialized GoogleGenAI instance.
+ */
+const ensureAi = () => {
+  if (!ai) {
+    throw new Error("Gemini API not initialized. Please ensure the API_KEY environment variable is configured correctly.");
+  }
+  return ai;
+};
+
 
 /**
  * Parses a prescription image to identify the medicine name.
@@ -17,16 +28,11 @@ const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
  * @returns The identified medicine name as a string.
  */
 export const parsePrescription = async (imageBase64: string): Promise<string> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Return a mock response for demonstration purposes
-    return "Metformin 500mg";
-  }
-
+  const ai = ensureAi();
   try {
     const imagePart = {
       inlineData: {
-        mimeType: 'image/jpeg', // Assuming jpeg, could be dynamic
+        mimeType: 'image/jpeg',
         data: imageBase64,
       },
     };
@@ -43,8 +49,7 @@ export const parsePrescription = async (imageBase64: string): Promise<string> =>
     return response.text.trim();
   } catch (error) {
     console.error("Error parsing prescription with Gemini API:", error);
-    // Fallback for demonstration
-    return "Error identifying medicine";
+    throw new Error("Failed to identify medicine from prescription image.");
   }
 };
 
@@ -54,19 +59,7 @@ export const parsePrescription = async (imageBase64: string): Promise<string> =>
  * @returns An array of identified inventory items.
  */
 export const parsePriceSlip = async (imageBase64: string): Promise<InventoryItem[]> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Return a mock response for demonstration purposes
-    return [
-      // Fix: Added missing 'stock' property to satisfy the InventoryItem type.
-      { medicineName: 'Dolo 650', price: 31.00, stock: StockStatus.Available },
-      // Fix: Added missing 'stock' property to satisfy the InventoryItem type.
-      { medicineName: 'Aspirin 75mg', price: 15.50, stock: StockStatus.Available },
-      // Fix: Added missing 'stock' property to satisfy the InventoryItem type.
-      { medicineName: 'Cetirizine 10mg', price: 25.00, stock: StockStatus.Available },
-    ];
-  }
-
+  const ai = ensureAi();
   try {
     const imagePart = {
       inlineData: {
@@ -103,7 +96,7 @@ export const parsePriceSlip = async (imageBase64: string): Promise<InventoryItem
       return result.map(item => ({...item, stock: StockStatus.Available}));
     }
     console.error("Gemini API returned non-JSON response:", jsonString);
-    return [];
+    throw new Error("Could not parse the price slip. The format was unexpected.");
 
   } catch (error) {
     console.error("Error parsing price slip with Gemini API:", error);
@@ -121,18 +114,7 @@ export const parsePriceSlip = async (imageBase64: string): Promise<InventoryItem
  * @returns A comma-separated string of recommended medicine names.
  */
 export const getMedicineRecommendations = async (diseaseQuery: string): Promise<string> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Return a mock response for demonstration purposes
-    if (diseaseQuery.toLowerCase().includes('fever')) {
-        return "Paracetamol, Ibuprofen, Dolo 650";
-    }
-     if (diseaseQuery.toLowerCase().includes('headache')) {
-        return "Paracetamol, Ibuprofen, Aspirin";
-    }
-    return ""; // a fallback for mock
-  }
-
+  const ai = ensureAi();
   try {
     const prompt = `Based on the user's query for a disease or symptom, recommend relevant medicine names. List common over-the-counter or prescription medicines. Provide the response as a single, comma-separated string of the top 1-3 medicine names. For example, for 'headache', return 'Paracetamol, Ibuprofen'. User query: '${diseaseQuery}'`;
     
@@ -144,7 +126,7 @@ export const getMedicineRecommendations = async (diseaseQuery: string): Promise<
     return response.text.trim();
   } catch (error) {
     console.error("Error getting medicine recommendations from Gemini API:", error);
-    return "";
+    throw new Error("Could not fetch medicine recommendations.");
   }
 };
 
@@ -155,27 +137,7 @@ export const getMedicineRecommendations = async (diseaseQuery: string): Promise<
  * @returns An object indicating if the name is valid and a corrected name if applicable.
  */
 export const validateMedicineName = async (medicineName: string): Promise<{ valid: boolean; correctedName: string; reason: string }> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Mock response for demonstration
-    const lowerCaseName = medicineName.toLowerCase();
-    const knownMedicines = ['paracetamol', 'ibuprofen', 'metformin', 'aspirin', 'atorvastatin', 'amoxicillin', 'cetirizine', 'metformin 500mg', 'dolo 650', 'crocin 650'];
-    
-    if (knownMedicines.includes(lowerCaseName)) {
-        const properNameMappings: {[key: string]: string} = {'dolo 650': 'Dolo 650', 'crocin 650': 'Crocin 650'};
-        const properName = properNameMappings[lowerCaseName] || medicineName.charAt(0).toUpperCase() + medicineName.slice(1).toLowerCase();
-        return { valid: true, correctedName: properName, reason: '' };
-    }
-    if (lowerCaseName === 'paracetmol') {
-        return { valid: true, correctedName: 'Paracetamol', reason: 'Corrected spelling.' };
-    }
-    if (medicineName.length < 3) {
-      return { valid: false, correctedName: '', reason: `"${medicineName}" is too short to be a valid medicine name.` };
-    }
-
-    return { valid: false, correctedName: '', reason: `"${medicineName}" does not seem to be a valid medicine name. Please check the spelling.` };
-  }
-
+  const ai = ensureAi();
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -205,13 +167,13 @@ export const validateMedicineName = async (medicineName: string): Promise<{ vali
         const result = JSON.parse(jsonString);
         return result;
     }
-    // Fallback if the response isn't valid JSON, assume it's okay to proceed
-    return { valid: true, correctedName: medicineName, reason: '' };
+    
+    console.error("Gemini API returned non-JSON response for validation:", jsonString);
+    throw new Error("Could not validate medicine name due to an unexpected response.");
     
   } catch (error) {
     console.error("Error validating medicine name with Gemini API:", error);
-    // Fallback to allow search if validation service fails, to not block the user
-    return { valid: true, correctedName: medicineName, reason: 'Could not validate medicine name, but proceeding with search.' };
+    throw new Error("Could not validate medicine name at this time.");
   }
 };
 
@@ -221,16 +183,7 @@ export const validateMedicineName = async (medicineName: string): Promise<{ vali
  * @returns A promise that resolves to a description string.
  */
 export const getMedicineDescription = async (medicineName: string): Promise<string> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Mock response for demonstration
-    const lowerCaseName = medicineName.toLowerCase();
-    if (lowerCaseName.includes('paracetamol') || lowerCaseName.includes('dolo 650')) {
-      return 'Paracetamol, the active ingredient in Dolo 650, is a common pain reliever and fever reducer. It is used to treat many conditions such as headaches, muscle aches, arthritis, backache, toothaches, colds, and fevers.';
-    }
-    return `Information about ${medicineName} would be shown here.`;
-  }
-
+  const ai = ensureAi();
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -239,7 +192,7 @@ export const getMedicineDescription = async (medicineName: string): Promise<stri
     return response.text.trim();
   } catch (error) {
     console.error("Error getting medicine description from Gemini API:", error);
-    return `Could not load information for ${medicineName}.`;
+    throw new Error(`Could not load information for ${medicineName}.`);
   }
 };
 
@@ -249,22 +202,7 @@ export const getMedicineDescription = async (medicineName: string): Promise<stri
  * @returns A promise that resolves to the name of an alternative medicine, or an empty string.
  */
 export const getMedicineAlternative = async (medicineName: string): Promise<string> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Mock response for demonstration
-    const lowerCaseName = medicineName.toLowerCase();
-    if (lowerCaseName.includes('paracetamol')) {
-      return 'Ibuprofen';
-    }
-    if (lowerCaseName.includes('dolo 650')) {
-        return 'Crocin 650';
-    }
-    if (lowerCaseName.includes('ibuprofen')) {
-        return 'Paracetamol';
-    }
-    return "";
-  }
-
+  const ai = ensureAi();
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -284,12 +222,7 @@ export const getMedicineAlternative = async (medicineName: string): Promise<stri
  * @returns A promise that resolves to an address string.
  */
 export const reverseGeocode = async (lat: number, lon: number): Promise<string> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Mock response for demonstration
-    return "123 Mockingbird Lane, Bengaluru, Karnataka 560001, India";
-  }
-
+  const ai = ensureAi();
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -298,7 +231,7 @@ export const reverseGeocode = async (lat: number, lon: number): Promise<string> 
     return response.text.trim();
   } catch (error) {
     console.error("Error with reverse geocoding from Gemini API:", error);
-    return `Could not determine address. Lat: ${lat}, Lon: ${lon}`;
+    throw new Error(`Could not determine address for Lat: ${lat}, Lon: ${lon}`);
   }
 };
 
@@ -308,12 +241,7 @@ export const reverseGeocode = async (lat: number, lon: number): Promise<string> 
  * @returns A promise that resolves to an object with lat and lon.
  */
 export const geocodeAddress = async (address: string): Promise<{ lat: number; lon: number }> => {
-  if (!ai) {
-    console.error("Gemini API key not configured.");
-    // Mock response for demonstration. This coordinate is for central Bangalore.
-    return { lat: 12.9716, lon: 77.5946 };
-  }
-
+  const ai = ensureAi();
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -340,13 +268,10 @@ export const geocodeAddress = async (address: string): Promise<{ lat: number; lo
             return result;
         }
     }
-     // Fallback for non-JSON or invalid response
-    console.error("Geocoding failed to return valid JSON. Address:", address);
-    return { lat: 12.9716, lon: 77.5946 }; // Fallback coordinate
+    throw new Error("Geocoding failed to return valid JSON.");
     
   } catch (error) {
     console.error("Error geocoding address with Gemini API:", error);
-    // Fallback if API fails
-    return { lat: 12.9716, lon: 77.5946 };
+    throw new Error("Could not find coordinates for the provided address.");
   }
 };

@@ -1,5 +1,5 @@
 {
-  "name": "Copy of gitcopy",
+  "name": "MediFinder",
   "description": "A modern, accessible web application that helps users find nearby pharmacies that stock specific medicines, compare prices, and receive AI-driven recommendations. The UI is dark-themed, intuitive, and designed for clarity and trust, catering to all users including elderly and rural populations.",
   "requestFramePermissions": [
     "camera",
